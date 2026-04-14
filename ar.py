@@ -1,0 +1,74 @@
+import cv2 as cv
+import numpy as np
+import os
+
+# 파일 존재 여부 확인 및 데이터 불러오기
+file_path = 'calib_data.npz'
+if not os.path.exists(file_path):
+    exit()
+
+with np.load(file_path) as data:
+    mtx, dist = data['mtx'], data['dist']
+
+# 큐브 3D 좌표 및 그리기 함수 정의
+def get_cube_points(size=3):
+    return np.float32([[0,0,0], [size,0,0], [size,size,0], [0,size,0],
+                       [0,0,-size], [size,0,-size], [size,size,-size], [0,size,-size]])
+
+def draw_cube(img, imgpts):
+    imgpts = np.int32(imgpts).reshape(-1, 2)
+    # 바닥면 (녹색)
+    img = cv.drawContours(img, [imgpts[:4]], -1, (0, 255, 0), 2)
+    # 기둥 (청색)
+    for i, j in zip(range(4), range(4, 8)):
+        img = cv.line(img, tuple(imgpts[i]), tuple(imgpts[j]), (255, 0, 0), 2)
+    # 천장면 (적색)
+    img = cv.drawContours(img, [imgpts[4:]], -1, (0, 0, 255), 2)
+    return img
+
+
+CHESS_SIZE = (10, 7)
+objp = np.zeros((CHESS_SIZE[0] * CHESS_SIZE[1], 3), np.float32)
+objp[:, :2] = np.mgrid[0:CHESS_SIZE[0], 0:CHESS_SIZE[1]].T.reshape(-1, 2)
+
+axis_points = get_cube_points(3)
+criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+
+# calibration 수행 영상 확인
+cap = cv.VideoCapture('cal2.mp4')
+
+print("press 'q' if you want exit.")
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("there is no video")
+        break
+
+    # 화면 크기 조절
+    frame = cv.resize(frame, (960, 540))
+    
+    gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+    ret_chess, corners = cv.findChessboardCorners(gray, CHESS_SIZE, None)
+
+    if ret_chess:
+        # 코너 정밀도 향상 (큐브 떨림 방지)
+        corners2 = cv.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+        
+        # 포즈 계산
+        _, rvec, tvec = cv.solvePnP(objp, corners2, mtx, dist)
+
+        # 3D 점을 2D로 투영
+        imgpts, _ = cv.projectPoints(axis_points, rvec, tvec, mtx, dist)
+
+        # 큐브 그리기
+        frame = draw_cube(frame, imgpts)
+    
+    # 결과 출력
+    cv.imshow('AR Cube on Chessboard', frame)
+    
+    if cv.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv.destroyAllWindows()
