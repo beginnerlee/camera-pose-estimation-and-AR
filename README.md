@@ -1,9 +1,4 @@
 
-
-https://github.com/user-attachments/assets/495050c2-e86f-425f-b0c0-489e751e7952
-
-this is result of my work.
-
 # camera-pose-estimation-and-AR
 A cuboid was placed at a specific point on the chessboard where calibration was performed.
 
